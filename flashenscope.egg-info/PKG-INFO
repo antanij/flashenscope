@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: flashenscope
+Version: 0.1
+Summary: Flashenscope Package for Microscopy Control
+Home-page: https://antanij.netlify.app/
+Author: antanij
+Author-email: jyot.antani@yale.edu
+Dynamic: author
+Dynamic: author-email
+Dynamic: home-page
+Dynamic: summary

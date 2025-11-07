@@ -1,0 +1,10 @@
+pyproject.toml
+setup.py
+flashenscope/__init__.py
+flashenscope/core.py
+flashenscope/functions.py
+flashenscope/utils.py
+flashenscope.egg-info/PKG-INFO
+flashenscope.egg-info/SOURCES.txt
+flashenscope.egg-info/dependency_links.txt
+flashenscope.egg-info/top_level.txt
