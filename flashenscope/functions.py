@@ -18,6 +18,7 @@ def initialize():
     mmc = get_core()    
     mmc.waitForSystem()
     print('All systems go ✅')
+    mmc.setZPosition(0)
     return mmc
     
 # ---------- Live preview ----------
