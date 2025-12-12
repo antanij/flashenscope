@@ -125,31 +125,31 @@ def live(config=None):
 
     root.mainloop()
 
-def takePicture(config=None, ROI=None, save_path=None):
+def takePicture(config=None, ROI=None, save_path=None, show_picture =False):
     mmc = get_core()
 
     if config:
-        print(f"Switching to channel config: {config}", flush=True)
         mmc.setConfig('Channel', config)
         mmc.waitForSystem()
+        current_config = config
 
-    # Check current config
-    current_config = mmc.getCurrentConfig('Channel')
-    print(f"Current config: {current_config}", flush=True)
+    # Check current config - does not work if config is defined as input in function (we don't use this)
+    # current_config = mmc.getCurrentConfig('Channel')
+    # print(f"Current config: {current_config}", flush=True)
 
-    lamp_on = False
-    if "tr" in current_config.lower():
-        try:
-            mmc.setConfig('lamp', 'on')
-            mmc.waitForSystem()
-            lamp_on = True
-            print("💡 Lamp turned ON (waiting 5s)...", flush=True)
-            time.sleep(5)
-        except Exception as e:
-            print(f"Warning: could not turn lamp on ({e})", flush=True)
+    # lamp_on = False
+    # if "tr" in current_config.lower():
+    #     try:
+    #         mmc.setConfig('lamp', 'on')
+    #         mmc.waitForSystem()
+    #         lamp_on = True
+    #         print("💡 Lamp turned ON (waiting 5s)...", flush=True)
+    #         time.sleep(5)
+    #    except Exception as e:
+    #        print(f"Warning: could not turn lamp on ({e})", flush=True)
 
     # Snap image
-    print("📸 Snapping image...", flush=True)
+    # print("📸 Snapping image...", flush=True)
     mmc.snapImage()
     img = mmc.getImage()
 
@@ -158,20 +158,21 @@ def takePicture(config=None, ROI=None, save_path=None):
     img = np.array(img, dtype=dtype)
 
     # Turn lamp off
-    if lamp_on:
-        try:
-            mmc.setConfig('lamp', 'off')
-            mmc.waitForSystem()
-            print("💡 Lamp turned OFF.", flush=True)
-        except Exception as e:
-            print(f"Warning: could not turn lamp off ({e})", flush=True)
+    #if lamp_on:
+    #    try:
+    #        mmc.setConfig('lamp', 'off')
+    #        mmc.waitForSystem()
+    #        print("💡 Lamp turned OFF.", flush=True)
+    #    except Exception as e:
+    #        print(f"Warning: could not turn lamp off ({e})", flush=True)
 
     # Display
-    plt.figure()
-    plt.imshow(img, cmap='gray')
-    plt.title('Snapped Image')
-    plt.axis('off')
-    plt.show(block=False)
+    if show_picture:
+        plt.figure()
+        plt.imshow(img, cmap='gray')
+        plt.title('Snapped Image')
+        plt.axis('off')
+        plt.show(block=False)
 
     if save_path:
         iio.imwrite(save_path, img)
