@@ -9,6 +9,9 @@ from pymmcore_plus import CMMCorePlus
 import threading
 import tkinter as tk
 from flashenscope.core import get_core
+from math import ceil
+import sys
+import json
 
 def initialize():
     """Initialize Micro-Manager Core."""
@@ -181,45 +184,205 @@ def takePicture(config=None, ROI=None, save_path=None, show_picture =False):
     return img
 
 
-def sequenceAcquisition(config=None, duration_s=30, fps=100, save_path=None):
-    mmc = get_core()
-    frame_interval_ms = 1000 / fps
-    n_frames = int(duration_s * fps)
+def sequenceAcquisition(file_name, runtime, config, bit8=False, ROI=None):
 
-    print(f"🎥 Starting {n_frames} frames at {fps} FPS...", flush=True)
-    if config:
-        mmc.setConfig('Channel', config)
+    import os
+    import sys
+    import json
+    import time
+    import numpy as np
+    from math import ceil
+
+    mmc = get_core()
+
+    # -----------------------------
+    # Configure microscope
+    # -----------------------------
+    mmc.setConfig('Channel', config)
+    mmc.waitForSystem()
+
+    camera = mmc.getCameraDevice()
+
+    interval_ms = float(mmc.getProperty(camera, 'Exposure'))
+    interval_s = interval_ms / 1000.0
+
+    print(
+        f"Config={config} | "
+        f"Exposure={interval_ms:.3f} ms"
+    )
+
+    # -----------------------------
+    # Bit depth
+    # -----------------------------
+    bytes_per_pixel = mmc.getBytesPerPixel()
+
+    if bytes_per_pixel == 1:
+        pixel_type = np.uint8
+    else:
+        pixel_type = np.uint16
+
+    # -----------------------------
+    # ROI
+    # -----------------------------
+    if ROI is not None:
+        x, y, w_roi, h_roi = ROI
+
+        mmc.setROI(
+            int(x),
+            int(y),
+            int(w_roi),
+            int(h_roi)
+        )
         mmc.waitForSystem()
 
-    mmc.startSequenceAcquisition(n_frames, frame_interval_ms, True)
+    w = mmc.getImageWidth()
+    h = mmc.getImageHeight()
 
-    frames = []
-    start_time = time.time()
-    dropped = 0
+    print(f"ROI = {w} x {h}")
 
-    while mmc.isSequenceRunning() or mmc.getRemainingImageCount() > 0:
-        if mmc.getRemainingImageCount() > 0:
+    # -----------------------------
+    # Expected frame count
+    # -----------------------------
+    nImages = ceil(runtime / interval_s)
+
+    # -----------------------------
+    # Output files
+    # -----------------------------
+    bin_path = file_name + ".bin"
+    meta_path = file_name + "_meta.json"
+
+    if os.path.exists(bin_path):
+        print(f"⚠️ File already exists: {bin_path}")
+        return
+
+    f = open(bin_path, "wb")
+
+    print(
+        f"Recording {nImages} frames "
+        f"({runtime:.1f}s at {1/interval_s:.2f} fps)"
+    )
+    print(f"Saving to: {bin_path}")
+
+    sys.stdout.flush()
+
+    # -----------------------------
+    # Circular buffer
+    # -----------------------------
+    mmc.setCircularBufferMemoryFootprint(32000)
+    mmc.initializeCircularBuffer()
+
+    mmc.prepareSequenceAcquisition(camera)
+    mmc.waitForSystem()
+
+    mmc.startContinuousSequenceAcquisition(interval_ms)
+
+    # -----------------------------
+    # Acquisition
+    # -----------------------------
+    frame_counter = 0
+
+    t_detect = []
+    dt_process = []
+
+    print("Acquiring...", flush=True)
+
+    t0 = time.time()
+
+    try:
+
+        while time.time() - t0 < runtime:
+
+            while mmc.getRemainingImageCount() > 0:
+
+                t1 = time.time()
+
+                img = mmc.popNextImage()
+
+                img = np.asarray(img, dtype=pixel_type)
+
+                if bit8 and bytes_per_pixel > 1:
+                    img = (img / 256).astype(np.uint8)
+
+                img.tofile(f)
+
+                frame_counter += 1
+
+                t_detect.append(time.time() - t0)
+                dt_process.append(time.time() - t1)
+
+            time.sleep(0.0005)
+
+    except KeyboardInterrupt:
+
+        print("Acquisition interrupted by user.")
+
+    finally:
+
+        # Drain any remaining frames
+        while mmc.getRemainingImageCount() > 0:
+
             img = mmc.popNextImage()
-            frames.append(np.array(img))
-        else:
-            time.sleep(0.001)
 
-    mmc.stopSequenceAcquisition()
+            img = np.asarray(img, dtype=pixel_type)
 
-    end_time = time.time()
-    elapsed = end_time - start_time
+            if bit8 and bytes_per_pixel > 1:
+                img = (img / 256).astype(np.uint8)
 
-    expected_frames = n_frames
-    captured_frames = len(frames)
-    dropped = expected_frames - captured_frames
+            img.tofile(f)
 
-    print(f"✅ Captured {captured_frames}/{expected_frames} frames.")
-    print(f"🕒 Duration: {elapsed:.2f}s ({captured_frames/elapsed:.1f} FPS actual).")
-    if dropped > 0:
-        print(f"⚠️ Dropped {dropped} frames.", flush=True)
+            frame_counter += 1
 
-    if save_path:
-        iio.imwrite(save_path, np.stack(frames))
-        print(f"💾 Saved movie to {save_path}")
+        mmc.stopSequenceAcquisition()
+        mmc.waitForSystem()
 
-    return np.stack(frames)
+        f.close()
+
+        mmc.clearCircularBuffer()
+        mmc.clearROI()
+
+    # -----------------------------
+    # Statistics
+    # -----------------------------
+    dropped_frames = max(0, nImages - frame_counter)
+
+    print(f"Saved {frame_counter} frames.")
+    print(f"Dropped frames: {dropped_frames}")
+
+    # -----------------------------
+    # Configuration metadata
+    # -----------------------------
+    cfgmeta = mmc.getConfigData('Channel', config)
+
+    cfg_dict = {}
+
+    for dev, prop, val in cfgmeta:
+        cfg_dict.setdefault(dev, {})
+        cfg_dict[dev][prop] = val
+
+    # -----------------------------
+    # Save metadata
+    # -----------------------------
+    meta = {
+        'Config': config,
+        'Runtime_sec': runtime,
+        'Exposure_ms': interval_ms,
+        'Frames_Requested': int(nImages),
+        'Frames_Saved': int(frame_counter),
+        'Dropped_Frames': int(dropped_frames),
+        'Resolution': {
+            'Width': int(w),
+            'Height': int(h),
+        },
+        'BitDepth': 8 if bit8 else bytes_per_pixel * 8,
+        'Timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'Configuration': cfg_dict,
+        't_detect': t_detect,
+        'dt_process': dt_process,
+        'scope_metadata': mmc.getTags(),
+    }
+
+    with open(meta_path, 'w') as mf:
+        json.dump(meta, mf, indent=2)
+
+    print(f"Metadata saved to: {meta_path}")
+    print("✅ Acquisition complete.")
