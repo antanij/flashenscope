@@ -8,4 +8,12 @@ setup(
     author_email='jyot.antani@yale.edu',
     url='https://antanij.netlify.app/',
     packages=find_packages(),
+    install_requires=[
+        'pymmcore_plus',
+        'numpy',
+        'matplotlib',
+        'imageio',
+        'opencv-python',
+        'screeninfo',        
+    ],
 )
