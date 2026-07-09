@@ -3,10 +3,10 @@
 Python scripts to control a fully motorized Nikon Ti microscope equipped with a Hamamatsu ORCA-Flash4.0 V3 camera. This repository relies on **Micro-Manager** and **pymmcore_plus** for hardware orchestration.
 
 ## Motorized Components Controlled
-* **Nikon Ti Microscope:** Nosepiece, filter turret, and halogen lamp.
-* **Camera:** Hamamatsu ORCA-Flash4.0 V3.
-* **Light Sources:** Lumencor SOLA light engine and Sutter shutter.
-* **Stage Controller:** Ludl M6000 (XY and Z control).
+* **Nikon Ti Microscope:** Nosepiece (objectives, Z-drive, PFS), filter turret, and halogen lamp
+* **Camera:** Hamamatsu ORCA-Flash4.0 V3
+* **Light Sources:** Lumencor SOLA light engine and Sutter shutter for Nikon's halogen
+* **Stage Controller:** Ludl M6000 (XY control)
 
 ---
 
